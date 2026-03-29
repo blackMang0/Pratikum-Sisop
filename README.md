@@ -264,12 +264,375 @@ Berikut adalah tampilan jika program "nemupusaka.sh" dijalankan
 
 dan isi dari file "posisipusaka.txt" akan sama seperti diatas
 
+## Soal 3
+### Deskripsi
+Membuat program bash script untuk mengelola data penghuni kost yang mencakup fungsi-fungsi berikut
+* **Tambah penghuni baru**
+* **Hapus penghuni**
+* **Tampilkan daftar penghuni**
+* **Update status penghuni**
+* **Cetak laporan keuangan**
+* **Kelola cron (pengingat tagihan)**
+* **Exit**
+Setiap bagian penting dari data yang disimpan dalam program tersebut akan diarahkan ke file-file yang berbeda, berikut adalah ketentuan lokasi file data tersebut
+* **Folder data, berisi database penghuni-penghuni baru atau lama, "penghuni.csv"
+* **Folder log, berisi log cron, tagihan yang menunggak "tagihan.log"
+* **Folder rekap, berisi laporan bulanan untuk penghuni yang sudah membayar atau masih menunggak "laporan_bulanan.txt"
+* **Folder sampah, berisi data penguni yang pernah dihapus "history_hapus.csv"
+Fokus utama dalam program ini yaitu untuk memperdalam pengetahuan mengenai bash script yang akan mengimplementasikan if-else, loop, hubungan dengan file-file luar, dan lain sebagainya, dan tentang penggunaan cronjob
 
+### Penjelasan
+Berikut adalah isi dari file "kost_slebew.sh" yang dipisah sesuai dengan fungsinya masing-masing
+```bash
+#!/bin/bash
 
+# ==============================
+# KONFIGURASI FILE
+# ==============================
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+DATA_DIR="$BASE_DIR/data"
+LOG_DIR="$BASE_DIR/log"
+REKAP_DIR="$BASE_DIR/rekap"
+SAMPAH_DIR="$BASE_DIR/sampah"
 
+DB_FILE="$DATA_DIR/penghuni.csv"
+LOG_FILE="$LOG_DIR/tagihan.log"
+LAPORAN_FILE="$REKAP_DIR/laporan_bulanan.txt"
+HISTORY_FILE="$SAMPAH_DIR/history_hapus.csv"
 
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$REKAP_DIR" "$SAMPAH_DIR"
 
+# buat file jika belum ada
+touch "$DB_FILE" "$LOG_FILE" "$LAPORAN_FILE" "$HISTORY_FILE"
 
+# header csv jika kosong
+if [ ! -s "$DB_FILE" ]; then
+    echo "nama,kamar,harga_sewa,tanggal_masuk,status" > "$DB_FILE"
+fi
+```
+Script diatas adalah untuk membuat folder/file-file baru yang akan digunakan untuk menyimpan data-data penting program, di dalam program juga terdapat antisipasi jika file sudah ada atau belum ada
 
+```bash
+pause(){
+    read -p "Tekan ENTER untuk kembali ke menu..."
+}
+
+valid_tanggal(){
+    date -d "$1" +"%Y-%m-%d" >/dev/null 2>&1
+}
+
+tanggal_tidak_masa_depan(){
+    today=$(date +%Y-%m-%d)
+    [[ "$1" <="$today" ]]
+}
+
+kamar_unik(){
+    grep -q ",$1," "$DB_FILE"
+    if [ $? -eq 0 ]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+status_valid(){
+    case "${1,,}" in
+        aktif|menunggak) return 0;;
+        *) return 1;;
+    esac
+}
+```
+Sedangkan script diatas digunakan untuk membuat program menjadi lebih interaktif dan untuk mengecek kondisi-kondisi yang memungkinkan, seperti jika tanggal yang dimasukkan adalah masa depan, kamar yang sama, penulisan status yang harus benar, dll
+
+Lanjut, berikutnya adalah fungsi pertama pada program yaitu menambah penghuni baru
+```bash
+tambah_penghuni(){
+
+    echo "===== TAMBAH PENGHUNI ====="
+
+    read -p "Masukkan Nama: " nama
+    read -p "Masukkan Kamar: " kamar
+    read -p "Masukkan Harga Sewa: " harga
+    read -p "Masukkan Tanggal Masuk (YYYY-MM-DD): " tanggal
+    read -p "Masukkan Status Awal (Aktif/Menunggak): " status
+
+    # validasi
+    if ! [[ "$harga" =~ ^[0-9]+$ ]]; then
+        echo "Harga harus angka positif"
+        pause
+        return
+    fi
+
+    if ! valid_tanggal "$tanggal"; then
+        echo "Format tanggal salah"
+        pause
+        return
+    fi
+
+    if ! tanggal_tidak_masa_depan "$tanggal"; then
+        echo "Tanggal tidak boleh masa depan"
+        pause
+        return
+    fi
+
+    if ! kamar_unik "$kamar"; then
+        echo "Nomor kamar sudah digunakan"
+        pause
+        return
+    fi
+
+    if ! status_valid "$status"; then
+        echo "Status harus Aktif atau Menunggak"
+        pause
+        return
+    fi
+
+    status=$(echo "$status" | awk '{print tolower($0)}')
+    status="$(tr '[:lower:]' '[:upper:]' <<< ${status:0:1})${status:1}"
+
+    echo "$nama,$kamar,$harga,$tanggal,$status" >> "$DB_FILE"
+
+    echo "[✓] Penghuni \"$nama\" berhasil ditambahkan ke kamar $kamar"
+    pause
+}
+```
+Diatas juga sudah terdapat antisipasi user jika user salah memasukkan input
+
+Berikut adalah tampilan program utama
+
+<img width="845" height="412" alt="Screenshot 2026-03-29 233016" src="https://github.com/user-attachments/assets/11fbe352-292e-4471-88d4-a35d801176a4" />
+
+dan ini adalah gambaran dari fungsi pertama
+
+<img width="757" height="493" alt="Screenshot 2026-03-29 233117" src="https://github.com/user-attachments/assets/28827b10-2c7c-4c2f-a2da-c9924624b288" />
+
+Lalu ini adalah fungsi yang kedua yaitu untuk menghapus penghuni
+
+```bash
+hapus_penghuni(){
+
+    echo "===== HAPUS PENGHUNI ====="
+    read -p "Masukkan nama penghuni: " nama
+
+    data=$(grep "^$nama," "$DB_FILE")
+
+    if [ -z "$data" ]; then
+        echo "Penghuni tidak ditemukan"
+        pause
+        return
+    fi
+
+    tanggal_hapus=$(date +%Y-%m-%d)
+
+    echo "$data,$tanggal_hapus" >> "$HISTORY_FILE"
+
+    grep -v "^$nama," "$DB_FILE" > temp.csv
+    mv temp.csv "$DB_FILE"
+
+    echo "[✓] Data $nama dipindahkan ke history_hapus.csv"
+    pause
+}
+```
+Cara program menghapus penghuni adalah dengan mencari nama menggunakan command grep, data yang dihapus akan masuk ke sampah folder
+
+Ini adalah tampilan menghapus penghuni
+
+<img width="607" height="175" alt="Screenshot 2026-03-29 233540" src="https://github.com/user-attachments/assets/ce908d81-fcea-4ce2-a6cf-76f523e0b2fe" />
+
+Fungsi yang ketiga yaitu untuk menampiikan penghuni yang ada, berikut scriptnya
+
+```bash
+tampilkan_penghuni(){
+
+    echo "===== DAFTAR PENGHUNI ====="
+
+    awk -F',' '
+    BEGIN{
+        printf "%-3s %-15s %-8s %-12s %-10s\n",
+        "No","Nama","Kamar","Harga","Status"
+    }
+
+    NR>1{
+        printf "%-3d %-15s %-8s Rp%-11s %-10s\n",
+        NR-1,$1,$2,$3,$5
+
+        if($5=="Aktif") aktif++
+        if($5=="Menunggak") tunggak++
+    }
+
+    END{
+        print "------------------------------"
+        printf "Aktif: %d | Menunggak: %d\n",
+        aktif,tunggak
+    }
+    ' "$DB_FILE"
+
+    pause
+}
+```
+Menggunakan *printf "%-3s %-15s %-8s %-12s %-10s\n",* agar tampilan penghuni terlihat lebih rapi
+Berikut tampilan program tersebut
+
+<img width="644" height="250" alt="Screenshot 2026-03-29 233843" src="https://github.com/user-attachments/assets/3624c980-aa0d-4ff0-9bc3-e75d046a52e8" />
+
+Fungsi yang keempat adalah untuk mengupdate status penghuni kost
+
+```bash
+update_status(){
+
+    echo "===== UPDATE STATUS ====="
+
+    read -p "Masukkan Nama: " nama
+    read -p "Masukkan Status Baru (Aktif/Menunggak): " status
+
+    if ! status_valid "$status"; then
+        echo "Status tidak valid"
+        pause
+        return
+    fi
+
+    awk -F',' -v OFS=',' -v nama="$nama" -v status="$status" '
+    {
+        if($1==nama){
+            $5=status
+            found=1
+        }
+        print
+    }
+
+    END{
+        if(found!=1){
+            print "NOTFOUND" > "/dev/stderr"
+        }
+    }
+    ' "$DB_FILE" > temp.csv
+
+    if grep -q NOTFOUND temp.csv; then
+        echo "Penghuni tidak ditemukan"
+        rm temp.csv
+    else
+        mv temp.csv "$DB_FILE"
+        echo "[✓] Status berhasil diupdate"
+    fi
+
+    pause
+}
+```
+Dengan memasukkan nama dan status yang ingin diubah, user dapat mengupdate status penghuni
+
+Lalu, Fungsi yang kelima yaitu laporan keuangan yang akan disimpan di folder rekap
+
+```bash
+laporan(){
+
+    aktif_total=$(awk -F',' '$5=="Aktif"{sum+=$3} END{print sum+0}' "$DB_FILE")
+
+    tunggak_total=$(awk -F',' '$5=="Menunggak"{sum+=$3} END{print sum+0}' "$DB_FILE")
+
+    jumlah_kamar=$(($(wc -l < "$DB_FILE")-1))
+
+    echo "===== LAPORAN =====" > "$LAPORAN_FILE"
+
+    echo "Total pemasukan (Aktif): Rp$aktif_total" >> "$LAPORAN_FILE"
+    echo "Total tunggakan: Rp$tunggak_total" >> "$LAPORAN_FILE"
+    echo "Jumlah kamar terisi: $jumlah_kamar" >> "$LAPORAN_FILE"
+
+    echo "" >> "$LAPORAN_FILE"
+    echo "Daftar penghuni menunggak:" >> "$LAPORAN_FILE"
+
+    awk -F',' '$5=="Menunggak"{print $1}' "$DB_FILE" >> "$LAPORAN_FILE"
+
+    echo "[✓] Laporan disimpan di $LAPORAN_FILE"
+    pause
+}
+```
+Berisi total penghuni aktif dan menunggak, jumlah kamar, pemasukan, tunggakan, dan jumlah kamar yang terisi, dan setiap laporan akan disimpan di file "laporan_bulanan.txt"
+Berikut tampilan program diatas
+
+<img width="1305" height="94" alt="Screenshot 2026-03-29 234314" src="https://github.com/user-attachments/assets/86945a36-4917-4e8c-8643-eb411552db0f" />
+
+Isi program langsung disimpan dalam file
+
+<img width="1078" height="212" alt="Screenshot 2026-03-29 234409" src="https://github.com/user-attachments/assets/6d47447d-8475-4e1b-b571-ca192ad30889" />
+
+Fungsi yang keenam adalah mengelola cron atau pengingat tagihan
+```bash
+kelola_cron(){
+
+while true
+do
+
+echo "===== MENU CRON ====="
+echo "1. Lihat Cron Aktif"
+echo "2. Daftarkan Cron"
+echo "3. Hapus Cron"
+echo "4. Kembali"
+
+read -p "Pilih: " pilih
+
+case $pilih in
+
+1)
+
+crontab -l 2>/dev/null | grep kost_slebew
+
+pause
+;;
+
+2)
+
+read -p "Jam (0-23): " jam
+read -p "Menit (0-59): " menit
+
+(crontab -l 2>/dev/null | grep -v kost_slebew
+echo "$menit $jam * * * $BASE_DIR/kost_slebew.sh --check-tagihan") | crontab -
+
+echo "[✓] Cron berhasil dibuat"
+
+pause
+;;
+
+3)
+
+crontab -l 2>/dev/null | grep -v kost_slebew | crontab -
+
+echo "[✓] Cron berhasil dihapus"
+
+pause
+;;
+
+4)
+break
+;;
+
+*)
+echo "Pilihan salah"
+;;
+
+esac
+
+done
+}
+```
+Yang didalam fungsi tersebut masih ada menu lagi yaitu menu untuk menambah cron, melihat cron yang aktif dan menghapus cron 
+
+<img width="1236" height="461" alt="Screenshot 2026-03-29 234717" src="https://github.com/user-attachments/assets/b4535c08-fa0c-41ff-ae41-d626b23752e0" />
+
+Lalu untuk fungsi terakhir yaitu untuk check tagihan
+```bash
+check_tagihan(){
+
+    while IFS=',' read nama kamar harga tanggal status
+    do
+        if [ "$status" == "Menunggak" ]; then
+
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] TAGIHAN: $nama (Kamar $kamar) - Menunggak Rp$harga" >> "$LOG_FILE"
+
+        fi
+    done < <(tail -n +2 "$DB_FILE")
+}
+```
+dan akan berjalan jika dipanggil seperti ini *./kost_slebew --check-tagihan* dan akan disimpan ke dalam file "tagihan.log"
+Namun masih terdapat kesalahan pada program sehingga "tagihan.log" malah akan berisi kosong
 
