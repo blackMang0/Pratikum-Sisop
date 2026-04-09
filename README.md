@@ -274,11 +274,12 @@ Membuat program bash script untuk mengelola data penghuni kost yang mencakup fun
 * **Cetak laporan keuangan**
 * **Kelola cron (pengingat tagihan)**
 * **Exit**
+
 Setiap bagian penting dari data yang disimpan dalam program tersebut akan diarahkan ke file-file yang berbeda, berikut adalah ketentuan lokasi file data tersebut
-* **Folder data, berisi database penghuni-penghuni baru atau lama, "penghuni.csv"
-* **Folder log, berisi log cron, tagihan yang menunggak "tagihan.log"
-* **Folder rekap, berisi laporan bulanan untuk penghuni yang sudah membayar atau masih menunggak "laporan_bulanan.txt"
-* **Folder sampah, berisi data penguni yang pernah dihapus "history_hapus.csv"
+* **Folder data, berisi database penghuni-penghuni baru atau lama, "penghuni.csv"**
+* **Folder log, berisi log cron, tagihan yang menunggak "tagihan.log"**
+* **Folder rekap, berisi laporan bulanan untuk penghuni yang sudah membayar atau masih menunggak "laporan_bulanan.txt"**
+* **Folder sampah, berisi data penguni yang pernah dihapus "history_hapus.csv"**
 Fokus utama dalam program ini yaitu untuk memperdalam pengetahuan mengenai bash script yang akan mengimplementasikan if-else, loop, hubungan dengan file-file luar, dan lain sebagainya, dan tentang penggunaan cronjob
 
 ### Penjelasan
